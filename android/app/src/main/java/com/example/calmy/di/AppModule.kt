@@ -15,7 +15,6 @@ import retrofit2.converter.gson.GsonConverterFactory
 const val BASE_URL = "http://10.0.2.2:8080/"
 
 object AppModule {
-
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }
@@ -23,7 +22,6 @@ object AppModule {
     private val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
-            // TODO: Add Authorization Bearer token interceptor after login/session refresh is implemented.
             .build()
     }
 
@@ -45,6 +43,10 @@ object AppModule {
 
     private val authRepository: AuthRepository by lazy {
         AuthRepositoryImpl(authApi = authApi)
+    }
+
+    fun provideAuthRepository(): AuthRepository {
+        return authRepository
     }
 
     fun provideRegisterViewModelFactory(): ViewModelProvider.Factory {

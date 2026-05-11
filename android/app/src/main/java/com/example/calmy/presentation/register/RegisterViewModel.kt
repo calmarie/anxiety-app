@@ -34,6 +34,12 @@ class RegisterViewModel(
         }
     }
 
+    fun onPasswordVisibilityChanged() {
+        _state.update { current ->
+            current.copy(isPasswordVisible = !current.isPasswordVisible)
+        }
+    }
+
     fun register() {
         val currentState = _state.value
         val validationError = validate(currentState)
@@ -75,9 +81,10 @@ class RegisterViewModel(
 
     private fun validate(state: RegisterState): String? {
         return when {
-            state.name.isBlank() -> "Name cannot be empty"
-            state.email.isBlank() -> "Email cannot be empty"
-            state.password.length < 6 -> "Password must be at least 6 characters"
+            state.name.isBlank() -> "Пожалуйста, укажи имя"
+            state.email.isBlank() -> "Пожалуйста, укажи email"
+            !state.email.contains("@") -> "Похоже, email введён не полностью"
+            state.password.length < 6 -> "Пароль должен содержать минимум 6 символов"
             else -> null
         }
     }

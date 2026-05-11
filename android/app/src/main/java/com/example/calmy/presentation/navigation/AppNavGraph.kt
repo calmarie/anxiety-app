@@ -27,6 +27,7 @@ fun AppNavGraph(
                 onNameChanged = viewModel::onNameChanged,
                 onEmailChanged = viewModel::onEmailChanged,
                 onPasswordChanged = viewModel::onPasswordChanged,
+                onPasswordVisibilityChanged = viewModel::onPasswordVisibilityChanged,
                 onRegisterClick = viewModel::register,
                 onRegisterSuccess = {
                     navController.navigate(Screen.Home.route) {
