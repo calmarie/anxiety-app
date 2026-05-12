@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"anxiety-backend/internal/auth"
+	"anxiety-backend/internal/notifications"
+	"anxiety-backend/internal/thoughts"
 	"anxiety-backend/internal/users"
 )
 
@@ -18,15 +20,31 @@ type authService interface {
 	GetByID(ctx context.Context, id string) (users.User, error)
 }
 
-type Server struct {
-	authService authService
-	jwtManager  *auth.JWTManager
+type thoughtService interface {
+	Sync(ctx context.Context, userID string, request thoughts.SyncRequest) (thoughts.SyncResponse, error)
+	ListByUserID(ctx context.Context, userID string) (thoughts.SyncResponse, error)
+	GetStatistics(ctx context.Context, userID string) (thoughts.StatisticsResponse, error)
 }
 
-func NewServer(authService authService, jwtManager *auth.JWTManager) http.Handler {
+type notificationService interface {
+	UpdateSettings(ctx context.Context, userID string, request notifications.UpdateSettingsRequest) (notifications.Settings, error)
+	GetSettings(ctx context.Context, userID string) (notifications.Settings, error)
+	GetSupportMessage(ctx context.Context, userID string) (notifications.SupportMessageResponse, error)
+}
+
+type Server struct {
+	authService   authService
+	thoughts      thoughtService
+	notifications notificationService
+	jwtManager    *auth.JWTManager
+}
+
+func NewServer(authService authService, thoughtService thoughtService, notificationService notificationService, jwtManager *auth.JWTManager) http.Handler {
 	server := &Server{
-		authService: authService,
-		jwtManager:  jwtManager,
+		authService:   authService,
+		thoughts:      thoughtService,
+		notifications: notificationService,
+		jwtManager:    jwtManager,
 	}
 
 	mux := http.NewServeMux()
@@ -34,6 +52,12 @@ func NewServer(authService authService, jwtManager *auth.JWTManager) http.Handle
 	mux.HandleFunc("POST /api/v1/auth/register", server.handleRegister)
 	mux.HandleFunc("POST /api/v1/auth/login", server.handleLogin)
 	mux.HandleFunc("GET /api/v1/auth/me", server.handleMe)
+	mux.HandleFunc("POST /api/v1/thoughts/sync", server.handleThoughtSync)
+	mux.HandleFunc("GET /api/v1/thoughts", server.handleThoughtList)
+	mux.HandleFunc("GET /api/v1/thoughts/statistics", server.handleThoughtStatistics)
+	mux.HandleFunc("POST /api/v1/notifications/settings", server.handleNotificationSettingsUpdate)
+	mux.HandleFunc("GET /api/v1/notifications/settings", server.handleNotificationSettingsGet)
+	mux.HandleFunc("GET /api/v1/notifications/support-message", server.handleSupportMessage)
 
 	return withJSONContentType(withCORS(mux))
 }
@@ -81,15 +105,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	tokenString, ok := bearerToken(r.Header.Get("Authorization"))
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "missing bearer token")
-		return
-	}
-
-	claims, err := s.jwtManager.Parse(tokenString)
+	claims, err := s.authorize(r)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid token")
+		writeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
@@ -111,6 +129,132 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, user)
 }
 
+func (s *Server) handleThoughtSync(w http.ResponseWriter, r *http.Request) {
+	claims, err := s.authorize(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	var request thoughts.SyncRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	response, err := s.thoughts.Sync(ctx, claims.UserID, request)
+	if err != nil {
+		s.writeThoughtError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleThoughtList(w http.ResponseWriter, r *http.Request) {
+	claims, err := s.authorize(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	response, err := s.thoughts.ListByUserID(ctx, claims.UserID)
+	if err != nil {
+		s.writeThoughtError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleThoughtStatistics(w http.ResponseWriter, r *http.Request) {
+	claims, err := s.authorize(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	response, err := s.thoughts.GetStatistics(ctx, claims.UserID)
+	if err != nil {
+		s.writeThoughtError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleNotificationSettingsUpdate(w http.ResponseWriter, r *http.Request) {
+	claims, err := s.authorize(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	var request notifications.UpdateSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	response, err := s.notifications.UpdateSettings(ctx, claims.UserID, request)
+	if err != nil {
+		s.writeNotificationError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleNotificationSettingsGet(w http.ResponseWriter, r *http.Request) {
+	claims, err := s.authorize(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	response, err := s.notifications.GetSettings(ctx, claims.UserID)
+	if err != nil {
+		s.writeNotificationError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleSupportMessage(w http.ResponseWriter, r *http.Request) {
+	claims, err := s.authorize(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	response, err := s.notifications.GetSupportMessage(ctx, claims.UserID)
+	if err != nil {
+		s.writeNotificationError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) writeAuthError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, users.ErrInvalidInput):
@@ -122,6 +266,40 @@ func (s *Server) writeAuthError(w http.ResponseWriter, err error) {
 	default:
 		writeError(w, http.StatusInternalServerError, "internal server error")
 	}
+}
+
+func (s *Server) writeThoughtError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, thoughts.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, "internal server error")
+	}
+}
+
+func (s *Server) writeNotificationError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, notifications.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, notifications.ErrSettingsNotFound):
+		writeError(w, http.StatusNotFound, "notification settings not found")
+	default:
+		writeError(w, http.StatusInternalServerError, "internal server error")
+	}
+}
+
+func (s *Server) authorize(r *http.Request) (*auth.Claims, error) {
+	tokenString, ok := bearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		return nil, errors.New("missing bearer token")
+	}
+
+	claims, err := s.jwtManager.Parse(tokenString)
+	if err != nil {
+		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
 }
 
 func withJSONContentType(next http.Handler) http.Handler {

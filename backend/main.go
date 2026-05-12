@@ -14,6 +14,8 @@ import (
 	"anxiety-backend/internal/config"
 	"anxiety-backend/internal/database"
 	httpapi "anxiety-backend/internal/http"
+	"anxiety-backend/internal/notifications"
+	"anxiety-backend/internal/thoughts"
 	"anxiety-backend/internal/users"
 )
 
@@ -30,10 +32,14 @@ func main() {
 	defer db.Close()
 
 	userRepo := users.NewRepository(db)
+	thoughtRepo := thoughts.NewRepository(db)
+	notificationRepo := notifications.NewRepository(db)
 	tokenManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTTokenTTL)
 	authService := users.NewAuthService(userRepo, tokenManager)
+	thoughtService := thoughts.NewService(thoughtRepo)
+	notificationService := notifications.NewService(notificationRepo, thoughtRepo)
 
-	handler := httpapi.NewServer(authService, tokenManager)
+	handler := httpapi.NewServer(authService, thoughtService, notificationService, tokenManager)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

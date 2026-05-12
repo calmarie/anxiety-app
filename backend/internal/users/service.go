@@ -1,13 +1,12 @@
 package users
 
 import (
+	"anxiety-backend/internal/auth"
 	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
-
-	"anxiety-backend/internal/auth"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"

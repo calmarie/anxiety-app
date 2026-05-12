@@ -11,6 +11,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations/001_create_users.sql:/docker-entrypoint-initdb.d/001_create_users.sql:ro
+      - ./migrations/002_create_anxiety_thoughts.sql:/docker-entrypoint-initdb.d/002_create_anxiety_thoughts.sql:ro
+      - ./migrations/003_create_user_notification_settings.sql:/docker-entrypoint-initdb.d/003_create_user_notification_settings.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d anxiety_app"]
       interval: 5s
