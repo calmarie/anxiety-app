@@ -2,6 +2,7 @@ package com.example.calmy.presentation.register
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Patterns
 import com.example.calmy.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -70,7 +71,7 @@ class RegisterViewModel(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            error = throwable.message ?: "Something went wrong",
+                            error = throwable.message ?: "Не удалось зарегистрироваться",
                             isSuccess = false
                         )
                     }
@@ -80,11 +81,13 @@ class RegisterViewModel(
     }
 
     private fun validate(state: RegisterState): String? {
+        val email = state.email.trim()
+        val name = state.name.trim()
         return when {
-            state.name.isBlank() -> "Пожалуйста, укажи имя"
-            state.email.isBlank() -> "Пожалуйста, укажи email"
-            !state.email.contains("@") -> "Похоже, email введён не полностью"
-            state.password.length < 6 -> "Пароль должен содержать минимум 6 символов"
+            name.length < 2 -> "Имя должно быть не короче 2 символов"
+            email.isBlank() -> "Пожалуйста, укажи email"
+            !Patterns.EMAIL_ADDRESS.matcher(email).matches() -> "Похоже, email введён не полностью"
+            state.password.length < 8 -> "Пароль должен содержать минимум 8 символов"
             else -> null
         }
     }

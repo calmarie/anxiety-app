@@ -23,7 +23,11 @@ fun CalmyCard(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (useSoftSurface) CalmyColors.SurfaceSoft else CalmyColors.Surface
+            containerColor = if (useSoftSurface) {
+                CalmyColors.SurfaceSoft.copy(alpha = 0.94f)
+            } else {
+                CalmyColors.Surface.copy(alpha = 0.96f)
+            }
         ),
         border = BorderStroke(1.dp, CalmyColors.Stroke),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

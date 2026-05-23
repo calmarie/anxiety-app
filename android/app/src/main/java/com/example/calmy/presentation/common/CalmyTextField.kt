@@ -116,7 +116,10 @@ fun CalmyPasswordTextField(
                 )
             },
             trailingIcon = {
-                IconButton(onClick = onVisibilityToggle) {
+                IconButton(
+                    onClick = onVisibilityToggle,
+                    enabled = enabled
+                ) {
                     Icon(
                         imageVector = if (isVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
                         contentDescription = null,
